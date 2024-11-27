@@ -1,5 +1,6 @@
 const express = require("express");
 const mongoose = require("mongoose");
+const cookieParser = require("cookie-parser");
 const dotenv = require("dotenv");
 const userRouter = require("./routes/userRoutes");
 
@@ -10,13 +11,11 @@ const PORT = process.env.PORT || 6000;
 
 // Middleware
 app.use(express.json());
+app.use(cookieParser());
 
 // Database Connection
 mongoose
-  .connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
+  .connect(process.env.MONGO_URI)
   .then(() => {
     console.log("Database connected successfully");
   })

@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
-
+const payment = require("./Payment");
+const ContentHistory = require("./ContentHistory");
 //Schema
 const userSchema = new mongoose.Schema(
   {
