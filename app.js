@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const cookieParser = require("cookie-parser");
 const dotenv = require("dotenv");
 const userRouter = require("./routes/userRoutes");
+const openAiRouter = require("./routes/openAiRouter");
 
 dotenv.config(); // Load environment variables
 
@@ -25,6 +26,7 @@ mongoose
 
 // Routes
 app.use("/", userRouter);
+app.use("/", openAiRouter);
 
 // Start Server
 app.listen(PORT, () => {
