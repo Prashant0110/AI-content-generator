@@ -26,9 +26,12 @@ mongoose
 
 // Routes
 app.use("/", userRouter);
-app.use("/", openAiRouter);
+app.use("/api/v1/openai", openAiRouter);
 
 // Start Server
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
