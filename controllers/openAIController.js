@@ -23,12 +23,15 @@ const openAIController = asyncHandler(async (req, res) => {
     // Content creation
     const generatedText = response?.data?.choices[0].text.trim();
     console.log(response.data);
-    const updatedApiRequestCount = req.user.apiRequestCount + 1;
+
     // Create history
     const history = await ContentHistory.create({
       user: req?.user?._id,
       content: generatedText,
     });
+
+    // Update API request count
+    const updatedApiRequestCount = req?.user?.apiRequestCount + 1;
     // Push history to the user document
     const userHistory = await User.findByIdAndUpdate(
       req?.user?._id,
