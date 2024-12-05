@@ -60,6 +60,13 @@ const userSchema = new mongoose.Schema(
     toObject: { virtuals: true },
   }
 );
+//trial period,
+
+userSchema.virtual("remainingTrialDays").get(function () {
+  return this.trialExpires > Date.now()
+    ? Math.ceil((this.trialExpires - Date.now()) / (1000 * 60 * 60 * 24))
+    : 0;
+});
 
 //! Compile to form the model
 const User = mongoose.model("User", userSchema);

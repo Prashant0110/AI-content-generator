@@ -1,13 +1,12 @@
 const express = require("express");
+const app = express();
 const mongoose = require("mongoose");
 const cookieParser = require("cookie-parser");
-const dotenv = require("dotenv");
+const dotenv = require("dotenv").config();
 const userRouter = require("./routes/userRoutes");
 const openAiRouter = require("./routes/openAiRouter");
+const stripeRouter = require("./routes/stripeRoutes");
 
-dotenv.config(); // Load environment variables
-
-const app = express();
 const PORT = process.env.PORT || 6000;
 
 // Middleware
@@ -26,6 +25,7 @@ mongoose
 
 // Routes
 app.use("/", userRouter);
+app.use("/", stripeRouter);
 app.use("/api/v1/openai", openAiRouter);
 
 // Start Server
