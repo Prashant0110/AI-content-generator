@@ -1,9 +1,6 @@
 const express = require("express");
 const asyncHandler = require("express-async-handler");
-const stripe = require("stripe")(
-  process.env.STRIPE_SECRET_KEY ||
-    "sk_test_51QSHuhHCVBXe7H0jV7kWKJIzz7UIHXMlsrU9OYbYNmPWmufjlJcEMew7fL6PtBhbMX5RDAdY0HaGMxpzbdv7pn6s00oiSWfS1v"
-);
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 console.log(process.env.STRIPE_SECRET_KEY);
 
 const handleStripePayment = asyncHandler(async (req, res) => {
@@ -33,5 +30,15 @@ const handleStripePayment = asyncHandler(async (req, res) => {
     });
   }
 });
+
+//freemium plan
+
+//check the user login status
+const userId = req.user._id;
+
+// Check if the user's subscription is due for renewal
+if (!checkIfRenewalDue(user)) {
+  return res.status(400).json({ message: "Your renewal is not due yet." });
+}
 
 module.exports = handleStripePayment;
