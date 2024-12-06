@@ -31,14 +31,48 @@ const handleStripePayment = asyncHandler(async (req, res) => {
   }
 });
 
-//freemium plan
+// Function to handle Freemium Plan Renewal
+const handleFreemiumRenewal = asyncHandler(async (req, res) => {
+  const user = req.user; // Get the logged-in user
 
-//check the user login status
-const userId = req.user._id;
+  // Check if the user's subscription is due for renewal
+  if (!checkIfRenewalDue(user)) {
+    return res.status(400).json({ message: "Your renewal is not due yet." });
+  }
 
-// Check if the user's subscription is due for renewal
-if (!checkIfRenewalDue(user)) {
-  return res.status(400).json({ message: "Your renewal is not due yet." });
-}
+  // Update user's subscription details using findByIdAndUpdate
+  const updatedUser = await User.findByIdAndUpdate(
+    user._id,
+    {
+      subscriptionPlan: "Free", // Ensure it's the free plan
+      $inc: { renewals: 1 }, // Increment renewal count
+      apiRequestCount: 5, // Reset API request count for free plan
+      nextBillingDate: calculateNextBillingDate(), // Set next billing date
+    },
+    { new: true } // Return the updated document
+  );
 
-module.exports = handleStripePayment;
+  // Record the freemium "payment" (no monetary value)
+  const paymentRecord = await Payment.create({
+    user: user._id,
+    subscriptionPlan: "Free",
+    amount: 0,
+    status: "success",
+    reference: "free-renewal",
+    currency: "usd",
+  });
+
+  // Add the payment record to the user's payments array
+  updatedUser.payments.push(paymentRecord._id);
+  await updatedUser.save();
+
+  res.json({
+    status: "success",
+    message: "Freemium plan renewed successfully.",
+    user: updatedUser,
+  });
+});
+module.exports = {
+  handleStripePayment,
+  handleFreemiumRenewal,
+};
