@@ -16,5 +16,10 @@ stripeRouter.post(
   checkAuthMiddleware,
   handleStripePayment.handleFreemiumRenewal
 );
+stripeRouter.post(
+  "/freemium-renewal",
+  checkAuthMiddleware,
+  handleStripePayment.handleFreemiumRenewal
+);
 
 module.exports = stripeRouter;
