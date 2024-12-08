@@ -1,5 +1,7 @@
 const express = require("express");
 const asyncHandler = require("express-async-handler");
+const Payment = require("../model/Payment");
+const User = require("../model/User");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 console.log(process.env.STRIPE_SECRET_KEY);
 
@@ -72,7 +74,102 @@ const handleFreemiumRenewal = asyncHandler(async (req, res) => {
     user: updatedUser,
   });
 });
+
+//Basic and Premium subscription plan
+const handlePaymentsVerification = asyncHandler(async (req, res) => {
+  //fetch the paymentId given by stripe
+  const { paymentIntentId } = req.params;
+  //check whethere the user is registered or not
+  const userId = req.body.id;
+  try {
+    console.log(
+      `Verifying payment for user ${userId} with payment intent ${paymentIntentId}`
+    );
+    const user = await User.findById(userId);
+
+    if (!user) {
+      console.log(`User not found with ID ${userId}`);
+      res.status(404).json({
+        message: "User not found",
+      });
+      return;
+    }
+    console.log(`User found: ${user.name}`);
+
+    //if user is registered, then retrieve payment intent
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    console.log(`Payment intent retrieved: ${paymentIntent.id}`);
+
+    //create a new payment record
+    const payment = await Payment.create({
+      user: user._id,
+      subscriptionPlan: paymentIntent.metadata.subscriptionPlan,
+      amount: paymentIntent.amount / 100,
+      status: paymentIntent.status,
+      reference: paymentIntent.id,
+      currency: paymentIntent.currency,
+    });
+    console.log(`Payment record created: ${payment._id}`);
+
+    //update the user subscription plan
+    let updatedUser;
+    if (user.subscriptionPlan === "Basic") {
+      console.log(
+        `Updating subscription plan for user ${userId} from Basic to ${paymentIntent.metadata.subscriptionPlan}`
+      );
+      updatedUser = await User.findByIdAndUpdate(
+        user._id,
+        {
+          subscriptionPlan: paymentIntent.metadata.subscriptionPlan,
+          // $inc: { renewals: 1 }, // Increment renewal count
+          apiRequestCount: 50,
+          nextBillingDate: calculateNextBillingDate(),
+          $push: { payments: payment._id },
+        },
+        { new: true }
+      );
+    } else if (user.subscriptionPlan === "Premium") {
+      console.log(
+        `Updating subscription plan for user ${userId} from Premium to ${paymentIntent.metadata.subscriptionPlan}`
+      );
+      updatedUser = await User.findByIdAndUpdate(
+        user._id,
+        {
+          subscriptionPlan: paymentIntent.metadata.subscriptionPlan,
+          // $inc: { renewals: 1 }, // Increment renewal count
+          apiRequestCount: 100,
+          nextBillingDate: calculateNextBillingDate(),
+          $push: { payments: payment._id },
+        },
+        { new: true }
+      );
+    } else {
+      console.log(
+        `User subscription plan is neither Basic nor Premium: ${user.subscriptionPlan}`
+      );
+      res.status(400).json({
+        message: "Invalid subscription plan",
+      });
+      return;
+    }
+
+    console.log(
+      `User subscription plan updated: ${updatedUser.subscriptionPlan}`
+    );
+    res.status(200).json({
+      status: "success",
+      message: "Payment verified successfully.",
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.error(`Error verifying payment: ${error.message}`);
+    res.status(404).json({
+      message: error.message,
+    });
+  }
+});
 module.exports = {
   handleStripePayment,
   handleFreemiumRenewal,
+  handlePaymentsVerification,
 };
