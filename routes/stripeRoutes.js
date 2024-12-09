@@ -22,9 +22,5 @@ stripeRouter.post(
   checkAuthMiddleware,
   handleStripePayment.handlePaymentsVerification
 );
-stripeRouter.post(
-  "/subscription/:paymentIntentId",
-  checkAuthMiddleware,
-  handleStripePayment.handlePaymentsVerification
-);
+
 module.exports = stripeRouter;
