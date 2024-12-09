@@ -35,7 +35,7 @@ const handleStripePayment = asyncHandler(async (req, res) => {
 
 // Function to handle Freemium Plan Renewal
 const handleFreemiumRenewal = asyncHandler(async (req, res) => {
-  const user = req.user; // Get the logged-in user
+  const user = req?.user; // Get the logged-in user
 
   // Check if the user's subscription is due for renewal
   if (!checkIfRenewalDue(user)) {
@@ -47,8 +47,8 @@ const handleFreemiumRenewal = asyncHandler(async (req, res) => {
     user._id,
     {
       subscriptionPlan: "Free", // Ensure it's the free plan
-      $inc: { renewals: 1 }, // Increment renewal count
-      apiRequestCount: 5, // Reset API request count for free plan
+      // $inc: { renewals: 1 }, // Increment renewal count
+      apiRequestCount: 50, // Reset API request count for free plan
       nextBillingDate: calculateNextBillingDate(), // Set next billing date
     },
     { new: true } // Return the updated document

@@ -8,7 +8,7 @@ stripeRouter.post(
   "/stripePayment",
   checkAuthMiddleware,
 
-  handleStripePayment
+  handleStripePayment.handleStripePayment
 );
 
 stripeRouter.post(
@@ -17,4 +17,14 @@ stripeRouter.post(
   handleStripePayment.handleFreemiumRenewal
 );
 
+stripeRouter.post(
+  "/subscription/:paymentIntentId",
+  checkAuthMiddleware,
+  handleStripePayment.handlePaymentsVerification
+);
+stripeRouter.post(
+  "/subscription/:paymentIntentId",
+  checkAuthMiddleware,
+  handleStripePayment.handlePaymentsVerification
+);
 module.exports = stripeRouter;
