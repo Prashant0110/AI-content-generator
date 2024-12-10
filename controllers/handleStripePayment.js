@@ -1,13 +1,28 @@
-const express = require("express");
 const asyncHandler = require("express-async-handler");
-const Payment = require("../model/Payment");
-const User = require("../model/User");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-console.log(process.env.STRIPE_SECRET_KEY);
+const User = require("../model/User");
+const Payment = require("../model/Payment");
+
+// Utility function to calculate the next billing date
+const calculateNextBillingDate = () => {
+  const date = new Date();
+  date.setMonth(date.getMonth() + 1);
+  return date;
+};
+
+// Validate subscription plan
+const validPlans = ["Trial", "Free", "Basic", "Premium"];
 
 const handleStripePayment = asyncHandler(async (req, res) => {
   const { amount, subscriptionPlan } = req.body;
   const user = req?.user;
+
+  if (!validPlans.includes(subscriptionPlan)) {
+    return res.status(400).json({
+      message: "Invalid subscription plan in request",
+    });
+  }
+
   try {
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Number(amount) * 100,
@@ -27,60 +42,17 @@ const handleStripePayment = asyncHandler(async (req, res) => {
       paymentIntent,
     });
   } catch (error) {
-    res.status(404).json({
+    console.error(`Stripe payment creation error: ${error.message}`);
+    res.status(500).json({
       message: error.message,
     });
   }
 });
 
-// Function to handle Freemium Plan Renewal
-const handleFreemiumRenewal = asyncHandler(async (req, res) => {
-  const user = req?.user; // Get the logged-in user
-
-  // Check if the user's subscription is due for renewal
-  if (!checkIfRenewalDue(user)) {
-    return res.status(400).json({ message: "Your renewal is not due yet." });
-  }
-
-  // Update user's subscription details using findByIdAndUpdate
-  const updatedUser = await User.findByIdAndUpdate(
-    user._id,
-    {
-      subscriptionPlan: "Free", // Ensure it's the free plan
-      // $inc: { renewals: 1 }, // Increment renewal count
-      apiRequestCount: 50, // Reset API request count for free plan
-      nextBillingDate: calculateNextBillingDate(), // Set next billing date
-    },
-    { new: true } // Return the updated document
-  );
-
-  // Record the freemium "payment" (no monetary value)
-  const paymentRecord = await Payment.create({
-    user: user._id,
-    subscriptionPlan: "Free",
-    amount: 0,
-    status: "success",
-    reference: "free-renewal",
-    currency: "usd",
-  });
-
-  // Add the payment record to the user's payments array
-  updatedUser.payments.push(paymentRecord._id);
-  await updatedUser.save();
-
-  res.json({
-    status: "success",
-    message: "Freemium plan renewed successfully.",
-    user: updatedUser,
-  });
-});
-
-//Basic and Premium subscription plan
 const handlePaymentsVerification = asyncHandler(async (req, res) => {
-  //fetch the paymentId given by stripe
   const { paymentIntentId } = req.params;
-  //check whethere the user is registered or not
   const userId = req.body.id;
+
   try {
     console.log(
       `Verifying payment for user ${userId} with payment intent ${paymentIntentId}`
@@ -89,21 +61,26 @@ const handlePaymentsVerification = asyncHandler(async (req, res) => {
 
     if (!user) {
       console.log(`User not found with ID ${userId}`);
-      res.status(404).json({
+      return res.status(404).json({
         message: "User not found",
       });
-      return;
     }
-    console.log(`User found: ${user.name}`);
 
-    //if user is registered, then retrieve payment intent
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-    console.log(`Payment intent retrieved: ${paymentIntent.id}`);
+    console.log(`Retrieved payment intent:`, paymentIntent);
 
-    //create a new payment record
+    const subscriptionPlan = paymentIntent.metadata.subscriptionPlan;
+
+    if (!validPlans.includes(subscriptionPlan)) {
+      return res.status(400).json({
+        message: `Invalid subscription plan in payment intent metadata: ${subscriptionPlan}`,
+      });
+    }
+
+    // Create a payment record
     const payment = await Payment.create({
       user: user._id,
-      subscriptionPlan: paymentIntent.metadata.subscriptionPlan,
+      subscriptionPlan,
       amount: paymentIntent.amount / 100,
       status: paymentIntent.status,
       reference: paymentIntent.id,
@@ -111,51 +88,21 @@ const handlePaymentsVerification = asyncHandler(async (req, res) => {
     });
     console.log(`Payment record created: ${payment._id}`);
 
-    //update the user subscription plan
-    let updatedUser;
-    if (user.subscriptionPlan === "Basic") {
-      console.log(
-        `Updating subscription plan for user ${userId} from Basic to ${paymentIntent.metadata.subscriptionPlan}`
-      );
-      updatedUser = await User.findByIdAndUpdate(
-        user._id,
-        {
-          subscriptionPlan: paymentIntent.metadata.subscriptionPlan,
-          // $inc: { renewals: 1 }, // Increment renewal count
-          apiRequestCount: 50,
-          nextBillingDate: calculateNextBillingDate(),
-          $push: { payments: payment._id },
-        },
-        { new: true }
-      );
-    } else if (user.subscriptionPlan === "Premium") {
-      console.log(
-        `Updating subscription plan for user ${userId} from Premium to ${paymentIntent.metadata.subscriptionPlan}`
-      );
-      updatedUser = await User.findByIdAndUpdate(
-        user._id,
-        {
-          subscriptionPlan: paymentIntent.metadata.subscriptionPlan,
-          // $inc: { renewals: 1 }, // Increment renewal count
-          apiRequestCount: 100,
-          nextBillingDate: calculateNextBillingDate(),
-          $push: { payments: payment._id },
-        },
-        { new: true }
-      );
-    } else {
-      console.log(
-        `User subscription plan is neither Basic nor Premium: ${user.subscriptionPlan}`
-      );
-      res.status(400).json({
-        message: "Invalid subscription plan",
-      });
-      return;
-    }
+    // Update user subscription
+    const updateData = {
+      subscriptionPlan,
+      apiRequestCount: subscriptionPlan === "Premium" ? 100 : 50,
+      nextBillingDate: calculateNextBillingDate(),
+      $push: { payments: payment._id },
+    };
 
+    const updatedUser = await User.findByIdAndUpdate(user._id, updateData, {
+      new: true,
+    });
     console.log(
       `User subscription plan updated: ${updatedUser.subscriptionPlan}`
     );
+
     res.status(200).json({
       status: "success",
       message: "Payment verified successfully.",
@@ -163,13 +110,57 @@ const handlePaymentsVerification = asyncHandler(async (req, res) => {
     });
   } catch (error) {
     console.error(`Error verifying payment: ${error.message}`);
-    res.status(404).json({
+    res.status(500).json({
       message: error.message,
     });
   }
 });
+
+const handleFreemiumRenewal = asyncHandler(async (req, res) => {
+  const user = req?.user;
+
+  if (new Date(user.nextBillingDate) > new Date()) {
+    console.log(`Renewal not due for user: ${user._id}`);
+    return res.status(400).json({ message: "Your renewal is not due yet." });
+  }
+
+  try {
+    const updatedUser = await User.findByIdAndUpdate(
+      user._id,
+      {
+        subscriptionPlan: "Free",
+        apiRequestCount: 50,
+        nextBillingDate: calculateNextBillingDate(),
+      },
+      { new: true }
+    );
+
+    const paymentRecord = await Payment.create({
+      user: user._id,
+      subscriptionPlan: "Free",
+      amount: 0,
+      status: "success",
+      reference: "free-renewal",
+      currency: "usd",
+    });
+
+    updatedUser.payments.push(paymentRecord._id);
+    await updatedUser.save();
+
+    console.log(`Freemium plan renewed for user: ${user._id}`);
+    res.json({
+      status: "success",
+      message: "Freemium plan renewed successfully.",
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.error(`Error during freemium renewal: ${error.message}`);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = {
   handleStripePayment,
-  handleFreemiumRenewal,
   handlePaymentsVerification,
+  handleFreemiumRenewal,
 };
