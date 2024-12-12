@@ -159,6 +159,8 @@ const handleFreemiumRenewal = asyncHandler(async (req, res) => {
   }
 });
 
+//completed premium section
+
 module.exports = {
   handleStripePayment,
   handlePaymentsVerification,
